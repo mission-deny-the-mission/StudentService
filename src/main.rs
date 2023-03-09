@@ -13,12 +13,10 @@ const DATABASE_URI: &str = "sqlite://student.db";
 
 #[get("/FetchCourses")]
 async fn fetch_courses() -> Result<impl Responder> {
-    let db: DatabaseConnection = Database::connect(DATABASE_URI).await.expect("Could not connect to database");
+    let db = Database::connect(DATABASE_URI)
+        .await.expect("Could not connect to database");
     Ok(web::Json(Course::find().into_json().all(&db)
         .await.expect("Could not fetch records from database")))
-//    let courses = Course::find().into_json().all(&db)
-//        .await.expect("Could not fetch records");
-//    Ok(Json(courses))
 }
 
 #[get("/")]
@@ -28,8 +26,7 @@ async fn index() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
-    HttpServer::new(move || {
+    HttpServer::new(|| {
         let logger = Logger::default();
         App::new()
             .service(index)
