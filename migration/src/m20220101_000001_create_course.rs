@@ -29,7 +29,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(Iden)]
-enum Course {
+pub enum Course {
     Table,
     Id,
     Name,
