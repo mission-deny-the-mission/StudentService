@@ -3,4 +3,5 @@
 pub mod prelude;
 
 pub mod course;
+pub mod enrolement;
 pub mod student;
