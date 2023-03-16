@@ -1,0 +1,16 @@
+<html>
+<head>
+    <title>Student profile: {{student.name}}}</title>
+</head>
+<body>
+    Name: {{student.name}}<br>
+    Email: {{student.email}}<br>
+    Student ID: {{student.student_id}}<br>
+    {% if let Some(number) = student.phone_number %}
+    Phone number: {{number}}<br>
+    {% else %}
+    Student does not have a registered phone number.<br>
+    {% endif %}
+    Home address: {{student.address}}
+</body>
+</html>
