@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 sea-orm = {version = "^0.11.0", features = ["runtime-actix-native-tls", "sqlx-sqlite", "macros"]}
-#rocket = {version = "0.5.0-rc.2", features = ["json", "secrets"]}
 actix-web = {version = "^4"}
+reqwest = {version = "0.11.14", features = ["json"]}
 serde = "^1.0.153"
+askama = "0.11.1"
