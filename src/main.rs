@@ -4,12 +4,14 @@ mod view;
 #[macro_use] extern crate actix_web;
 
 use std::sync::mpsc::SendError;
+use std::path::PathBuf;
+use actix_files::NamedFile;
 use actix_web::{HttpServer, App, web::Data, web, middleware::Logger, Responder, HttpResponse, Result};
 use entity::{course, student, prelude};
 use entity::prelude::{Course, Student};
 use sea_orm::prelude::*;
 use sea_orm::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use reqwest;
 use view::*;
 
@@ -40,9 +42,42 @@ async fn student_profile(path: web::Path<i32>) -> Result<impl Responder> {
     }
 }
 
+#[get("/RegisterStudentForm.html")]
+async fn student_form() -> Result<impl Responder> {
+    let path: PathBuf = "./static/RegisterStudent.html".parse().unwrap();
+    Ok(NamedFile::open(path))
+}
+
+#[derive(Deserialize)]
+struct student_form_input {
+    student_id: String,
+    name: String,
+    email: String,
+    phone_number: Option<String>,
+    address: String,
+}
+#[post("/RegisterStudentSubmit")]
+async fn register_student_submit(form: web::Form<student_form_input>) -> Result<impl Responder> {
+    let student_entry = student::ActiveModel {
+        id: NotSet,
+        name: Set(form.name.to_owned()),
+        email: Set(form.email.to_owned()),
+        student_id: Set(form.student_id.to_owned()),
+        phone_number: Set(form.phone_number.to_owned()),
+        address: Set(form.address.to_owned()),
+    };
+    let db = Database::connect(DATABASE_URI)
+        .await.expect("Could not connect to database");
+    let student_record = student::Entity::insert(student_entry).exec(&db)
+        .await.expect("Could not insert record");
+    let success_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
+    Ok(NamedFile::open(success_path))
+}
+
 #[get("/")]
-async fn index() -> impl Responder {
-    "Hello world"
+async fn index() -> Result<impl Responder> {
+    let path: PathBuf = "./static/index.html".parse().unwrap();
+    Ok(NamedFile::open(path))
 }
 
 #[actix_web::main]
@@ -53,6 +88,8 @@ async fn main() -> std::io::Result<()> {
             .service(index)
             .service(fetch_courses)
             .service(student_profile)
+            .service(student_form)
+            .service(register_student_submit)
     })
         .bind(("0.0.0.0", 8000))?
         .run()
