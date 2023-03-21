@@ -1,5 +1,6 @@
 mod entity;
 mod view;
+mod finance_client;
 
 #[macro_use] extern crate actix_web;
 
@@ -12,7 +13,6 @@ use entity::prelude::{Course, Student};
 use sea_orm::prelude::*;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
-use reqwest;
 use view::*;
 
 const DATABASE_URI: &str = "sqlite://student.db";
@@ -66,6 +66,8 @@ async fn register_student_submit(form: web::Form<student_form_input>) -> Result<
         phone_number: Set(form.phone_number.to_owned()),
         address: Set(form.address.to_owned()),
     };
+    finance_client::register_student(form.student_id.to_owned())
+        .await.expect("Could not register student in finance application.");
     let db = Database::connect(DATABASE_URI)
         .await.expect("Could not connect to database");
     let student_record = student::Entity::insert(student_entry).exec(&db)
@@ -91,7 +93,7 @@ async fn main() -> std::io::Result<()> {
             .service(student_form)
             .service(register_student_submit)
     })
-        .bind(("0.0.0.0", 8000))?
+        .bind(("0.0.0.0", 8085))?
         .run()
         .await
 }
