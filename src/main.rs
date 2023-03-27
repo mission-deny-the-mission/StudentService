@@ -14,6 +14,7 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
 use view::*;
+use crate::finance_client::fetch_finance_account;
 
 const DATABASE_URI: &str = "sqlite://student.db";
 
@@ -36,7 +37,9 @@ async fn student_profile(path: web::Path<i32>) -> Result<impl Responder> {
     let query_result = Student::find_by_id(id).one(&db)
         .await.expect("Could not get record from database.");
     if let Some(student) = query_result {
-        Ok(HttpResponse::Ok().body(StudentListView(student)))
+        let finance_account = fetch_finance_account(&student.student_id.to_owned())
+            .await.expect("Error occured while trying to fetch finance account");
+        Ok(HttpResponse::Ok().body(StudentListView(student, finance_account)))
     } else {
         Ok(HttpResponse::NotFound().body("Could not find student with that ID"))
     }
@@ -66,7 +69,7 @@ async fn register_student_submit(form: web::Form<student_form_input>) -> Result<
         phone_number: Set(form.phone_number.to_owned()),
         address: Set(form.address.to_owned()),
     };
-    finance_client::register_student(form.student_id.to_owned())
+    finance_client::register_finance_account(&form.student_id.to_owned())
         .await.expect("Could not register student in finance application.");
     let db = Database::connect(DATABASE_URI)
         .await.expect("Could not connect to database");

@@ -1,5 +1,6 @@
 use askama::Template;
 use crate::entity::*;
+use super::finance_client::account;
 
 #[derive(Template)]
 #[template(path = "Courses.html")]
@@ -16,9 +17,13 @@ pub fn CourseListView(records: Vec<course::Model>) -> String {
 #[template(path = "Student.html")]
 struct StudentListTemplate {
     student: student::Model,
+    finance: Option<account>
 }
 
-pub fn StudentListView(student_record: student::Model) -> String {
-    let template = StudentListTemplate { student: student_record };
+pub fn StudentListView(student_record: student::Model, finance_account: Option<account>) -> String {
+    let template = StudentListTemplate {
+        student: student_record,
+        finance: finance_account,
+    };
     template.render().unwrap()
 }

@@ -11,6 +11,11 @@
     {% else %}
     Student does not have a registered phone number.<br>
     {% endif %}
-    Home address: {{student.address}}
+    Home address: {{student.address}}<br>
+    {% if let Some(account) = finance %}
+    Has outstanding balance: {{account.hasOutstandingBalance}}<br>
+    {% else %}
+    Student does not have finance account.<br>
+    {% endif %}
 </body>
 </html>
