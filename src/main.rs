@@ -1,5 +1,5 @@
 mod entity;
-mod view;
+//mod view;
 mod finance_client;
 
 #[macro_use] extern crate actix_web;
@@ -13,10 +13,21 @@ use entity::prelude::{Course, Student};
 use sea_orm::prelude::*;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
-use view::*;
 use crate::finance_client::fetch_finance_account;
 
+use askama::Template;
+use crate::entity::*;
+//use super::finance_client::account;
+
 const DATABASE_URI: &str = "sqlite://student.db";
+
+#[derive(Template)]
+#[template(path = "Courses.html")]
+struct CourseListTemplate<'a> {
+    courses: &'a Vec<course::Model>,
+}
+
+
 
 #[get("/FetchCourses")]
 async fn fetch_courses() -> Result<impl Responder> {
@@ -24,9 +35,41 @@ async fn fetch_courses() -> Result<impl Responder> {
         .await.expect("Could not connect to database");
     let records = Course::find().all(&db)
         .await.expect("Could not fetch course records from database");
-    let html = CourseListView(records);
+    let template = CourseListTemplate { courses: &records };
+    let html = template.render().unwrap();
 
     Ok(HttpResponse::Ok().body(html))
+}
+
+#[derive(Template)]
+#[template(path = "StudentList.html")]
+struct StudentListTemplate {
+    student_finance_array: Vec<(student::Model, Option<finance_client::account>)>,
+}
+
+#[get("/StudentList")]
+async fn student_list() -> Result<impl Responder> {
+    let db = Database::connect(DATABASE_URI)
+        .await.expect("Could not connect to database");
+    let studentList: Vec<student::Model> = Student::find().all(&db)
+        .await.expect("Could not fetch records from database.");
+    let mut student_finance_list:  Vec<(student::Model, Option<finance_client::account>)> = Vec::with_capacity(studentList.len());
+    for student in studentList {
+        let finance_account_option = fetch_finance_account(&student.student_id.to_owned())
+            .await.expect("Error occurred while fetching finance account");
+        student_finance_list.push((student, finance_account_option));
+    }
+    let template = StudentListTemplate { student_finance_array: student_finance_list };
+    let html = template.render().unwrap();
+    Ok(HttpResponse::Ok().body(html))
+}
+
+
+#[derive(Template)]
+#[template(path = "Student.html")]
+struct StudentProfileTemplate {
+    student: student::Model,
+    finance: Option<finance_client::account>
 }
 
 #[get("/StudentProfile/{id}")]
@@ -39,7 +82,12 @@ async fn student_profile(path: web::Path<i32>) -> Result<impl Responder> {
     if let Some(student) = query_result {
         let finance_account = fetch_finance_account(&student.student_id.to_owned())
             .await.expect("Error occured while trying to fetch finance account");
-        Ok(HttpResponse::Ok().body(StudentListView(student, finance_account)))
+        let template = StudentProfileTemplate {
+            student: student,
+            finance: finance_account,
+        };
+        let html = template.render().unwrap();
+        Ok(HttpResponse::Ok().body(html))
     } else {
         Ok(HttpResponse::NotFound().body("Could not find student with that ID"))
     }
@@ -92,6 +140,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .service(index)
             .service(fetch_courses)
+            .service(student_list)
             .service(student_profile)
             .service(student_form)
             .service(register_student_submit)

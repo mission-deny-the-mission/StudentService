@@ -1,0 +1,38 @@
+<html>
+<head>
+    <title>Student list</title>
+
+</head>
+<body>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone number</th>
+            <th>Address</th>
+            <th>Has outstanding balance</th>
+        </tr>
+        {% for (student, finance_account_option) in student_finance_array %}
+        <tr>
+            <td>{{student.name}}</td>
+            <td>{{student.email}}</td>
+            {% if let Some(phone_number) = student.phone_number %}
+                <td>{{phone_number}}</td>
+            {% else %}
+                <td>No phone number</td>
+            {% endif %}
+            <td>{{student.address}}</td>
+            {% if let Some(finance_account) = finance_account_option %}
+                {% if finance_account.hasOutstandingBalance %}
+                    <td>Yes</td>
+                {% else %}
+                    <td>No</td>
+                {% endif %}
+            {% else %}
+                <td>No finance account</td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

@@ -73,18 +73,4 @@ pub async fn register_finance_account(StudentID: &String) -> Result<bool, reqwes
             Ok(true)
         }
     }
-    /*
-    let alreadyExists: bool = check_for_finance_account(StudentID.to_owned()).await?;
-    if !alreadyExists {
-        let studentSubmission = registerStudentJson {
-            studentId: StudentID,
-        };
-        reqwest::Client::new()
-            .post("http://localhost:8081/accounts")
-            .json(&studentSubmission)
-            .send()
-            .await?;
-    }
-    return Ok(!alreadyExists);
-    */
 }
