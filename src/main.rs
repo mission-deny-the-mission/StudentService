@@ -4,6 +4,7 @@ mod finance_client;
 
 #[macro_use] extern crate actix_web;
 
+use std::fs;
 use std::sync::mpsc::SendError;
 use std::path::PathBuf;
 use actix_files::NamedFile;
@@ -14,21 +15,18 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
 use crate::finance_client::fetch_finance_account;
-
 use askama::Template;
 use crate::entity::*;
-//use super::finance_client::account;
+use chrono;
+use crate::entity::prelude::Enrolement;
 
 const DATABASE_URI: &str = "sqlite://student.db";
 
 #[derive(Template)]
-#[template(path = "Courses.html")]
+#[template(path = "CourseList.html")]
 struct CourseListTemplate<'a> {
     courses: &'a Vec<course::Model>,
 }
-
-
-
 #[get("/FetchCourses")]
 async fn fetch_courses() -> Result<impl Responder> {
     let db = Database::connect(DATABASE_URI)
@@ -46,7 +44,6 @@ async fn fetch_courses() -> Result<impl Responder> {
 struct StudentListTemplate {
     student_finance_array: Vec<(student::Model, Option<finance_client::account>)>,
 }
-
 #[get("/StudentList")]
 async fn student_list() -> Result<impl Responder> {
     let db = Database::connect(DATABASE_URI)
@@ -81,7 +78,7 @@ async fn student_profile(path: web::Path<i32>) -> Result<impl Responder> {
         .await.expect("Could not get record from database.");
     if let Some(student) = query_result {
         let finance_account = fetch_finance_account(&student.student_id.to_owned())
-            .await.expect("Error occured while trying to fetch finance account");
+            .await.expect("Error occurred while trying to fetch finance account");
         let template = StudentProfileTemplate {
             student: student,
             finance: finance_account,
@@ -127,11 +124,66 @@ async fn register_student_submit(form: web::Form<student_form_input>) -> Result<
     Ok(NamedFile::open(success_path))
 }
 
+#[derive(Template)]
+#[template(path = "EnrollForm.html")]
+struct enroll_form_template {
+    students: Vec<student::Model>,
+    courses: Vec<course::Model>,
+}
+#[get("/Enroll")]
+async fn enroll_form() -> Result<impl Responder> {
+    let db = Database::connect(DATABASE_URI)
+        .await.expect("Could not connect to database");
+    let studentList = Student::find().all(&db)
+        .await.expect("Could not fetch records from database.");
+    let courseList = Course::find().all(&db)
+        .await.expect("Could not fetch course records from database");
+    let template = enroll_form_template {
+        students: studentList,
+        courses: courseList,
+    };
+    let html = template.render().unwrap();
+    Ok(HttpResponse::Ok().body(html))
+}
+
+#[derive(Deserialize)]
+struct enrollment_form {
+    student_id: i32,
+    course_id: i32,
+}
+#[post("/Enroll")]
+async fn enroll(form: web::Form<enrollment_form>) -> Result<impl Responder> {
+    let db = Database::connect(DATABASE_URI)
+        .await.expect("Could not connect to database");
+    let student_record = Student::find_by_id(form.student_id).one(&db)
+        .await.expect("Could not get record from database.");
+    let course_record = Course::find_by_id(form.course_id).one(&db)
+        .await.expect("Could not get record from database.");
+    if student_record != None && course_record != None {
+        let date_string = format!("{}", chrono::offset::Local::now().format("%d/%m/%Y"));
+        let enrolment_record = enrolement::ActiveModel {
+            student_id: Set(form.student_id.to_owned()),
+            course_id: Set(form.course_id.to_owned()),
+            enrolement_date: Set(date_string),
+        };
+        let enrollment_record = Enrolement::insert(enrolment_record).exec(&db)
+            .await.expect("Error occurred while trying to enroll the student in the database");
+        let success_path: PathBuf = "./static/EnrollmentSuccess.html".parse().unwrap();
+        let html = fs::read_to_string(success_path).expect("Could not read file");
+        Ok(HttpResponse::Ok().body(html))
+    }
+    else {
+        Ok(HttpResponse::UnprocessableEntity().body("Student or course ID is invalid."))
+    }
+}
+
 #[get("/")]
 async fn index() -> Result<impl Responder> {
     let path: PathBuf = "./static/index.html".parse().unwrap();
     Ok(NamedFile::open(path))
 }
+
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -144,6 +196,8 @@ async fn main() -> std::io::Result<()> {
             .service(student_profile)
             .service(student_form)
             .service(register_student_submit)
+            .service(enroll_form)
+            .service(enroll)
     })
         .bind(("0.0.0.0", 8085))?
         .run()

@@ -1,38 +1,46 @@
 <html>
 <head>
     <title>Student list</title>
-
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
 </head>
 <body>
-    <table>
-        <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone number</th>
-            <th>Address</th>
-            <th>Has outstanding balance</th>
-        </tr>
-        {% for (student, finance_account_option) in student_finance_array %}
-        <tr>
-            <td>{{student.name}}</td>
-            <td>{{student.email}}</td>
-            {% if let Some(phone_number) = student.phone_number %}
-                <td>{{phone_number}}</td>
-            {% else %}
-                <td>No phone number</td>
-            {% endif %}
-            <td>{{student.address}}</td>
-            {% if let Some(finance_account) = finance_account_option %}
-                {% if finance_account.hasOutstandingBalance %}
-                    <td>Yes</td>
+    <h1>List of students:</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Email</th>
+                <th scope="col">Phone number</th>
+                <th scope="col">Address</th>
+                <th scope="col">Has outstanding balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for (student, finance_account_option) in student_finance_array %}
+            <tr>
+                <td>{{student.name}}</td>
+                <td>{{student.email}}</td>
+                {% if let Some(phone_number) = student.phone_number %}
+                    <td>{{phone_number}}</td>
                 {% else %}
-                    <td>No</td>
+                    <td>No phone number</td>
                 {% endif %}
-            {% else %}
-                <td>No finance account</td>
-            {% endif %}
-        </tr>
-        {% endfor %}
+                <td>{{student.address}}</td>
+                {% if let Some(finance_account) = finance_account_option %}
+                    {% if finance_account.hasOutstandingBalance %}
+                        <td>Yes</td>
+                    {% else %}
+                        <td>No</td>
+                    {% endif %}
+                {% else %}
+                    <td>No finance account</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
+    <button type="button" class="btn btn-primary" onclick="window.location.href='../';">
+        Back to home page
+    </button>
 </body>
 </html>

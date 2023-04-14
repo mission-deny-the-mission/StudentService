@@ -3,14 +3,13 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "Enrolement")]
+#[sea_orm(table_name = "enrolement")]
 pub struct Model {
-    #[sea_orm(column_name = "StudentID", primary_key, auto_increment = false)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub student_id: i32,
-    #[sea_orm(column_name = "CourseID", primary_key, auto_increment = false)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub course_id: i32,
-    #[sea_orm(column_name = "EnrolementDate")]
-    pub enrolement_date: Option<String>,
+    pub enrolement_date: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

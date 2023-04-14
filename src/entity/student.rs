@@ -17,4 +17,13 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
 
+impl Related<super::course::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::enrolement::Relation::Course.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::enrolement::Relation::Student.def().rev())
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}
