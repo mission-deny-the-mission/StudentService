@@ -1,4 +1,5 @@
 mod entity;
+mod config;
 //mod view;
 mod finance_client;
 
@@ -18,9 +19,16 @@ use crate::finance_client::{createInvoiceExternal, fetch_finance_account};
 use askama::Template;
 use crate::entity::*;
 use chrono;
+use sea_orm::TryGetError::DbErr;
 use crate::entity::prelude::Enrolement;
+use dotenv::dotenv;
 
-const DATABASE_URI: &str = "sqlite://student.db";
+#[derive(Template)]
+#[template(path = "Error.html")]
+struct ErrorTemplate {
+    title_message: String,
+    body_message: String,
+}
 
 #[derive(Template)]
 #[template(path = "CourseList.html")]
@@ -28,10 +36,9 @@ struct CourseListTemplate<'a> {
     courses: &'a Vec<course::Model>,
 }
 #[get("/FetchCourses")]
-async fn fetch_courses() -> Result<impl Responder> {
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let records = Course::find().all(&db)
+async fn fetch_courses(db_state: web::Data<DatabaseConnection>) -> Result<impl Responder> {
+    let db = db_state.get_ref();
+    let records = Course::find().all(db)
         .await.expect("Could not fetch course records from database");
     let template = CourseListTemplate { courses: &records };
     let html = template.render().unwrap();
@@ -53,7 +60,8 @@ struct course_form_input {
     tuition_cost: f64,
 }
 #[post("/CreateCourse")]
-async fn course_submit(form: web::Form<course_form_input>) -> Result<impl Responder> {
+async fn course_submit(db_state: web::Data<DatabaseConnection>, form: web::Form<course_form_input>)
+    -> Result<impl Responder> {
     let course_entry = course::ActiveModel {
         id: NotSet,
         name: Set(form.name.to_owned()),
@@ -61,9 +69,8 @@ async fn course_submit(form: web::Form<course_form_input>) -> Result<impl Respon
         leader: Set(form.leader.to_owned()),
         tuition_cost: Set(form.tuition_cost.to_owned()),
     };
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let student_record = course::Entity::insert(course_entry).exec(&db)
+    let db = db_state.get_ref();
+    let student_record = course::Entity::insert(course_entry).exec(db)
         .await.expect("Could not insert record");
     let success_page_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
     Ok(NamedFile::open(success_page_path))
@@ -75,10 +82,9 @@ struct StudentListTemplate {
     student_finance_array: Vec<(student::Model, Option<finance_client::account>)>,
 }
 #[get("/StudentList")]
-async fn student_list() -> Result<impl Responder> {
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let studentList: Vec<student::Model> = Student::find().all(&db)
+async fn student_list(db_state: web::Data<DatabaseConnection>) -> Result<impl Responder> {
+    let db = db_state.get_ref();
+    let studentList: Vec<student::Model> = Student::find().all(db)
         .await.expect("Could not fetch records from database.");
     let mut student_finance_list:  Vec<(student::Model, Option<finance_client::account>)> = Vec::with_capacity(studentList.len());
     for student in studentList {
@@ -100,11 +106,11 @@ struct StudentProfileTemplate {
 }
 
 #[get("/StudentProfile/{id}")]
-async fn student_profile(path: web::Path<i32>) -> Result<impl Responder> {
+async fn student_profile(db_state: web::Data<DatabaseConnection>, path: web::Path<i32>)
+    -> Result<impl Responder> {
     let id = path.into_inner();
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let query_result = Student::find_by_id(id).one(&db)
+    let db = db_state.get_ref();
+    let query_result = Student::find_by_id(id).one(db)
         .await.expect("Could not get record from database.");
     if let Some(student) = query_result {
         let finance_account = fetch_finance_account(&student.student_id.to_owned())
@@ -135,7 +141,9 @@ struct student_form_input {
     address: String,
 }
 #[post("/RegisterStudentSubmit")]
-async fn register_student_submit(form: web::Form<student_form_input>) -> Result<impl Responder> {
+async fn register_student_submit(db_state: web::Data<DatabaseConnection>,
+                                 form: web::Form<student_form_input>)
+    -> Result<impl Responder> {
     let student_entry = student::ActiveModel {
         id: NotSet,
         name: Set(form.name.to_owned()),
@@ -146,9 +154,8 @@ async fn register_student_submit(form: web::Form<student_form_input>) -> Result<
     };
     finance_client::register_finance_account(&form.student_id.to_owned())
         .await.expect("Could not register student in finance application.");
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let student_record = student::Entity::insert(student_entry).exec(&db)
+    let db = db_state.get_ref();
+    let student_record = student::Entity::insert(student_entry).exec(db)
         .await.expect("Could not insert record");
     let success_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
     Ok(NamedFile::open(success_path))
@@ -161,12 +168,12 @@ struct enroll_form_template {
     courses: Vec<course::Model>,
 }
 #[get("/Enroll")]
-async fn enroll_form() -> Result<impl Responder> {
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let studentList = Student::find().all(&db)
+async fn enroll_form(db_state: web::Data<DatabaseConnection>)
+    -> Result<impl Responder> {
+    let db = db_state.get_ref();
+    let studentList = Student::find().all(db)
         .await.expect("Could not fetch records from database.");
-    let courseList = Course::find().all(&db)
+    let courseList = Course::find().all(db)
         .await.expect("Could not fetch course records from database");
     let template = enroll_form_template {
         students: studentList,
@@ -182,12 +189,12 @@ struct enrollment_form {
     course_id: i32,
 }
 #[post("/Enroll")]
-async fn enroll(form: web::Form<enrollment_form>) -> Result<impl Responder> {
-    let db = Database::connect(DATABASE_URI)
-        .await.expect("Could not connect to database");
-    let student_record = Student::find_by_id(form.student_id).one(&db)
+async fn enroll(form: web::Form<enrollment_form>, web_db_state: web::Data<DatabaseConnection>)
+    -> Result<impl Responder> {
+    let db = web_db_state.get_ref();
+    let student_record = Student::find_by_id(form.student_id).one(db)
         .await.expect("Could not get record from database.");
-    let course_record = Course::find_by_id(form.course_id).one(&db)
+    let course_record = Course::find_by_id(form.course_id).one(db)
         .await.expect("Could not get record from database.");
     if student_record != None && course_record != None {
         let date_string = format!("{}", chrono::offset::Local::now().format("%d/%m/%Y"));
@@ -202,11 +209,22 @@ async fn enroll(form: web::Form<enrollment_form>) -> Result<impl Responder> {
             course_id: Set(form.course_id.to_owned()),
             enrolement_date: Set(date_string),
         };
-        let enrollment_record = Enrolement::insert(enrolment_record).exec(&db)
-            .await.expect("Error occurred while trying to enroll the student in the database");
-        let success_path: PathBuf = "./static/EnrollmentSuccess.html".parse().unwrap();
-        let html = fs::read_to_string(success_path).expect("Could not read file");
-        Ok(HttpResponse::Ok().body(html))
+        let enrolement_result = Enrolement::insert(enrolment_record).exec(db).await;
+        match enrolement_result {
+            Ok(Something) => {
+                let success_path: PathBuf = "./static/EnrollmentSuccess.html".parse().unwrap();
+                let html = fs::read_to_string(success_path).expect("Could not read file");
+                Ok(HttpResponse::Ok().body(html))
+            },
+            Err(someerror) => {
+                let template = ErrorTemplate {
+                    title_message: "Error occured while trying to enrole student".to_string(),
+                    body_message: "Check if the student is already enrolled.".to_string()
+                };
+                let html = template.render().unwrap();
+                Ok(HttpResponse::Ok().body(html))
+            }
+        }
     }
     else {
         Ok(HttpResponse::UnprocessableEntity().body("Student or course ID is invalid."))
@@ -223,9 +241,13 @@ async fn index() -> Result<impl Responder> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        let logger = Logger::default();
+    dotenv().ok();
+    let config = crate::config::Config::from_env().unwrap();
+    let db = Database::connect(config.database_url)
+        .await.expect("Could not connect to database");
+    HttpServer::new(move || {
         App::new()
+            .app_data(Data::new(db.clone()))
             .service(index)
             .service(fetch_courses)
             .service(course_form)
@@ -237,7 +259,7 @@ async fn main() -> std::io::Result<()> {
             .service(enroll_form)
             .service(enroll)
     })
-        .bind(("0.0.0.0", 8085))?
+        .bind((config.server.host, config.server.port))?
         .run()
         .await
 }
