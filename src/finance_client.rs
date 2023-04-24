@@ -74,3 +74,56 @@ pub async fn register_finance_account(StudentID: &String) -> Result<bool, reqwes
         }
     }
 }
+
+#[derive(Serialize)]
+struct invoiceAccountInput {
+    studentId: String,
+}
+
+#[derive(Serialize)]
+struct invoiceInput {
+    amount: f64,
+    dueDate: String,
+    #[serde(rename = "type")]
+    invoiceType: String,
+    account: invoiceAccountInput,
+}
+
+#[derive(Deserialize)]
+struct createInvoiceResult {
+    id: i64,
+    reference: String,
+    amount: f64,
+    dueDate: String,
+    #[serde(rename = "type")]
+    invoiceType: String,
+    status: String,
+    studentId: String,
+    _links: JsonLinks,
+}
+
+async fn createInvoice(StudentID: &String, invoiceType: &String, amount: f64, dueDate: &String)
+    -> Result<Result<createInvoiceResult, serde_json::Error>, reqwest::Error> {
+    let input = invoiceInput {
+        amount,
+        dueDate: dueDate.to_owned(),
+        invoiceType: invoiceType.to_owned(),
+        account: invoiceAccountInput {
+            studentId: StudentID.to_owned(),
+        },
+    };
+    let response = reqwest::Client::new()
+        .post("http://localhost:8081/invoices/")
+        .json(&input)
+        .send()
+        .await?
+        .text()
+        .await?;
+    Ok(serde_json::from_str(&response))
+}
+
+
+pub async fn createInvoiceExternal(StudentID: &String, invoiceType: &String, amount: f64, dueDate: &String) {
+    let returnValue = createInvoice(StudentID, invoiceType, amount, dueDate);
+    returnValue.await.expect("Could not create invoice");
+}

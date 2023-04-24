@@ -2,7 +2,7 @@
 
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "course")]
 pub struct Model {
     #[sea_orm(primary_key)]
@@ -10,6 +10,8 @@ pub struct Model {
     pub name: String,
     pub subject: String,
     pub leader: String,
+    #[sea_orm(column_type = "Double")]
+    pub tuition_cost: f64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

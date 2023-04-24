@@ -19,6 +19,7 @@ impl MigrationTrait for Migration {
                 .col(ColumnDef::new(Course::Name).string().not_null())
                 .col(ColumnDef::new(Course::Subject).string().not_null())
                 .col(ColumnDef::new(Course::Leader).string().not_null())
+                .col(ColumnDef::new(Course::TuitionCost).float().not_null())
                 .to_owned()
         ).await
     }
@@ -35,4 +36,5 @@ pub enum Course {
     Name,
     Subject,
     Leader,
+    TuitionCost,
 }

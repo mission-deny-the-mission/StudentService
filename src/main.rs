@@ -14,7 +14,7 @@ use entity::prelude::{Course, Student};
 use sea_orm::prelude::*;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
-use crate::finance_client::fetch_finance_account;
+use crate::finance_client::{createInvoiceExternal, fetch_finance_account};
 use askama::Template;
 use crate::entity::*;
 use chrono;
@@ -37,6 +37,36 @@ async fn fetch_courses() -> Result<impl Responder> {
     let html = template.render().unwrap();
 
     Ok(HttpResponse::Ok().body(html))
+}
+
+#[get("/CreateCourse")]
+async fn course_form() -> Result<impl Responder> {
+    let path: PathBuf = "./static/CourseForm.html".parse().unwrap();
+    Ok(NamedFile::open(path))
+}
+
+#[derive(Deserialize)]
+struct course_form_input {
+    name: String,
+    subject: String,
+    leader: String,
+    tuition_cost: f64,
+}
+#[post("/CreateCourse")]
+async fn course_submit(form: web::Form<course_form_input>) -> Result<impl Responder> {
+    let course_entry = course::ActiveModel {
+        id: NotSet,
+        name: Set(form.name.to_owned()),
+        subject: Set(form.subject.to_owned()),
+        leader: Set(form.leader.to_owned()),
+        tuition_cost: Set(form.tuition_cost.to_owned()),
+    };
+    let db = Database::connect(DATABASE_URI)
+        .await.expect("Could not connect to database");
+    let student_record = course::Entity::insert(course_entry).exec(&db)
+        .await.expect("Could not insert record");
+    let success_page_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
+    Ok(NamedFile::open(success_page_path))
 }
 
 #[derive(Template)]
@@ -161,6 +191,12 @@ async fn enroll(form: web::Form<enrollment_form>) -> Result<impl Responder> {
         .await.expect("Could not get record from database.");
     if student_record != None && course_record != None {
         let date_string = format!("{}", chrono::offset::Local::now().format("%d/%m/%Y"));
+        let Some(course) = course_record else { panic!("No idea how you got here.") };
+        let Some(student) = student_record else { panic!("No idea how you got here ")};
+        createInvoiceExternal(&student.student_id,
+                              &"TUITION".to_string(),
+                              course.tuition_cost,
+                              &date_string);
         let enrolment_record = enrolement::ActiveModel {
             student_id: Set(form.student_id.to_owned()),
             course_id: Set(form.course_id.to_owned()),
@@ -192,6 +228,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .service(index)
             .service(fetch_courses)
+            .service(course_form)
+            .service(course_submit)
             .service(student_list)
             .service(student_profile)
             .service(student_form)
