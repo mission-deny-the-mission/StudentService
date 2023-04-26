@@ -6,7 +6,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "enrolement")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub student_id: i32,
+    pub student_id: String,
     #[sea_orm(primary_key, auto_increment = false)]
     pub course_id: i32,
     pub enrolement_date: String,
@@ -25,7 +25,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::student::Entity",
         from = "Column::StudentId",
-        to = "super::student::Column::Id",
+        to = "super::student::Column::StudentId",
         on_update = "NoAction",
         on_delete = "NoAction"
     )]

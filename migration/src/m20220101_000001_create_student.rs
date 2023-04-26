@@ -10,15 +10,12 @@ impl MigrationTrait for Migration {
             Table::create()
                 .table(Student::Table)
                 .if_not_exists()
-                .col(ColumnDef::new(Student::Id)
-                    .integer()
+                .col(ColumnDef::new(Student::StudentID)
+                    .string()
                     .not_null()
-                    .auto_increment()
-                    .primary_key()
-                )
+                    .primary_key())
                 .col(ColumnDef::new(Student::Name).string().not_null())
                 .col(ColumnDef::new(Student::Email).string().not_null())
-                .col(ColumnDef::new(Student::StudentID).string().not_null())
                 .col(ColumnDef::new(Student::PhoneNumber).string())
                 .col(ColumnDef::new(Student::Address).string().not_null())
                 .to_owned()
@@ -34,7 +31,6 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 pub enum Student {
     Table,
-    Id,
     Name,
     Email,
     StudentID,

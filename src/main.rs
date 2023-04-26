@@ -24,6 +24,9 @@ use sea_orm::TryGetError::DbErr;
 use crate::entity::prelude::Enrolement;
 use dotenv::dotenv;
 
+// this is a struct used for generating a HTML page using a template with askama template library
+// The fields the template needs to be filled in are specified as attributes in the struct
+// This template specifically is for error pages
 #[derive(Template)]
 #[template(path = "Error.html")]
 struct ErrorTemplate {
@@ -36,23 +39,31 @@ struct ErrorTemplate {
 struct CourseListTemplate<'a> {
     courses: &'a Vec<course::Model>,
 }
+// This method is for the web page with the list of courses
 #[get("/FetchCourses")]
 async fn fetch_courses(db_state: web::Data<DatabaseConnection>) -> Result<impl Responder> {
     let db = db_state.get_ref();
+    // This fetches all of the courses from the database
     let records = Course::find().all(db)
         .await.expect("Could not fetch course records from database");
+    // this renders the HTML template for the courses page
     let template = CourseListTemplate { courses: &records };
     let html = template.render().unwrap();
 
+    // this line controls the HTTP response including sending the HTML page to the browser
     Ok(HttpResponse::Ok().body(html))
 }
 
+// This is the form for creating a new course it is a static web page
 #[get("/CreateCourse")]
 async fn course_form() -> Result<impl Responder> {
     let path: PathBuf = "./static/CourseForm.html".parse().unwrap();
     Ok(NamedFile::open(path))
 }
 
+// This struct is for processing the form for creating a course. Each field of the form is
+// represented here as an attribute
+// Actix will parse the form for us into this struct when handling the post request
 #[derive(Deserialize)]
 struct course_form_input {
     name: String,
@@ -77,6 +88,10 @@ async fn course_submit(db_state: web::Data<DatabaseConnection>, form: web::Form<
     Ok(NamedFile::open(success_page_path))
 }
 
+// Template for the list of students
+// Here an std::vec is used which is a type of array data structure within rust and is short for
+// vector. Here it's used to store the list of students and associated finance accounts stored
+// together in a tuple.
 #[derive(Template)]
 #[template(path = "StudentList.html")]
 struct StudentListTemplate {
@@ -85,9 +100,14 @@ struct StudentListTemplate {
 #[get("/StudentList")]
 async fn student_list(db_state: web::Data<DatabaseConnection>) -> Result<impl Responder> {
     let db = db_state.get_ref();
+    // We first get the student records from the database and store it in a vec
     let studentList: Vec<student::Model> = Student::find().all(db)
         .await.expect("Could not fetch records from database.");
+    // then we create a larger vec to store the students with the finance accounts
     let mut student_finance_list:  Vec<(student::Model, Option<finance_client::account>)> = Vec::with_capacity(studentList.len());
+    // Then we try to retrieve the finance account associated with each student in the database
+    // and store it in the second vec along with the student details
+    // if we can't then we just store the student details
     for student in studentList {
         let finance_account_option = fetch_finance_account(&student.student_id.to_owned())
             .await.expect("Error occurred while fetching finance account");
@@ -98,7 +118,7 @@ async fn student_list(db_state: web::Data<DatabaseConnection>) -> Result<impl Re
     Ok(HttpResponse::Ok().body(html))
 }
 
-
+// template for the student profile page
 #[derive(Template)]
 #[template(path = "Student.html")]
 struct StudentProfileTemplate {
@@ -106,8 +126,9 @@ struct StudentProfileTemplate {
     finance: Option<finance_client::account>
 }
 
+// function for displaying a student profile
 #[get("/StudentProfile/{id}")]
-async fn student_profile(db_state: web::Data<DatabaseConnection>, path: web::Path<i32>)
+async fn student_profile(db_state: web::Data<DatabaseConnection>, path: web::Path<String>)
     -> Result<impl Responder> {
     let id = path.into_inner();
     let db = db_state.get_ref();
@@ -146,10 +167,9 @@ async fn register_student_submit(db_state: web::Data<DatabaseConnection>,
                                  form: web::Form<student_form_input>)
     -> Result<impl Responder> {
     let student_entry = student::ActiveModel {
-        id: NotSet,
+        student_id: Set(form.student_id.to_owned()),
         name: Set(form.name.to_owned()),
         email: Set(form.email.to_owned()),
-        student_id: Set(form.student_id.to_owned()),
         phone_number: Set(form.phone_number.to_owned()),
         address: Set(form.address.to_owned()),
     };
@@ -187,14 +207,14 @@ async fn enroll_form(db_state: web::Data<DatabaseConnection>)
 
 #[derive(Deserialize)]
 struct enrollment_form {
-    student_id: i32,
+    student_id: String,
     course_id: i32,
 }
 #[post("/Enroll")]
 async fn enroll(form: web::Form<enrollment_form>, web_db_state: web::Data<DatabaseConnection>)
     -> Result<impl Responder> {
     let db = web_db_state.get_ref();
-    let student_record = Student::find_by_id(form.student_id).one(db)
+    let student_record = Student::find_by_id(form.student_id.clone()).one(db)
         .await.expect("Could not get record from database.");
     let course_record = Course::find_by_id(form.course_id).one(db)
         .await.expect("Could not get record from database.");
