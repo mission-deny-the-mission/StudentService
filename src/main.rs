@@ -2,6 +2,7 @@ mod entity;
 mod config;
 //mod view;
 mod finance_client;
+mod library_client;
 
 #[macro_use] extern crate actix_web;
 
@@ -152,11 +153,12 @@ async fn register_student_submit(db_state: web::Data<DatabaseConnection>,
         phone_number: Set(form.phone_number.to_owned()),
         address: Set(form.address.to_owned()),
     };
-    finance_client::register_finance_account(&form.student_id.to_owned())
-        .await.expect("Could not register student in finance application.");
     let db = db_state.get_ref();
     let student_record = student::Entity::insert(student_entry).exec(db)
         .await.expect("Could not insert record");
+    finance_client::register_finance_account(&form.student_id.to_owned())
+        .await.expect("Could not register student in finance application.");
+    library_client::register_account(&form.student_id);
     let success_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
     Ok(NamedFile::open(success_path))
 }
