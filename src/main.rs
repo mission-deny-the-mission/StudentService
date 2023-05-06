@@ -1,7 +1,8 @@
 mod entity;
 mod config;
 //mod view;
-mod finance_client;
+mod finance_trait;
+mod reqwest_finance_client;
 mod library_client;
 
 #[macro_use] extern crate actix_web;
@@ -16,7 +17,8 @@ use entity::prelude::{Course, Student};
 use sea_orm::prelude::*;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
-use crate::finance_client::{createInvoiceExternal, fetch_finance_account};
+use finance_trait::{FinanceAccount, FinanceClient};
+use reqwest_finance_client::ReqwestFinanceClient;
 use askama::Template;
 use crate::entity::*;
 use chrono;
@@ -41,8 +43,8 @@ struct CourseListTemplate<'a> {
 }
 // This method is for the web page with the list of courses
 #[get("/FetchCourses")]
-async fn fetch_courses(db_state: web::Data<DatabaseConnection>) -> Result<impl Responder> {
-    let db = db_state.get_ref();
+async fn fetch_courses(program_state: web::Data<ProgramState>) -> Result<impl Responder> {
+    let db = &program_state.db.clone();
     // This fetches all of the courses from the database
     let records = Course::find().all(db)
         .await.expect("Could not fetch course records from database");
@@ -72,7 +74,7 @@ struct course_form_input {
     tuition_cost: f64,
 }
 #[post("/CreateCourse")]
-async fn course_submit(db_state: web::Data<DatabaseConnection>, form: web::Form<course_form_input>)
+async fn course_submit(program_state: web::Data<ProgramState>, form: web::Form<course_form_input>)
     -> Result<impl Responder> {
     let course_entry = course::ActiveModel {
         id: NotSet,
@@ -81,7 +83,7 @@ async fn course_submit(db_state: web::Data<DatabaseConnection>, form: web::Form<
         leader: Set(form.leader.to_owned()),
         tuition_cost: Set(form.tuition_cost.to_owned()),
     };
-    let db = db_state.get_ref();
+    let db = &program_state.db.clone();
     let student_record = course::Entity::insert(course_entry).exec(db)
         .await.expect("Could not insert record");
     let success_page_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
@@ -95,21 +97,22 @@ async fn course_submit(db_state: web::Data<DatabaseConnection>, form: web::Form<
 #[derive(Template)]
 #[template(path = "StudentList.html")]
 struct StudentListTemplate {
-    student_finance_array: Vec<(student::Model, Option<finance_client::account>)>,
+    student_finance_array: Vec<(student::Model, Option<FinanceAccount>)>,
 }
 #[get("/StudentList")]
-async fn student_list(db_state: web::Data<DatabaseConnection>) -> Result<impl Responder> {
-    let db = db_state.get_ref();
+async fn student_list(program_state: web::Data<ProgramState>) -> Result<impl Responder> {
+    let db = &program_state.db.clone();
+    let finance_client = program_state.finance_client.clone();
     // We first get the student records from the database and store it in a vec
     let studentList: Vec<student::Model> = Student::find().all(db)
         .await.expect("Could not fetch records from database.");
     // then we create a larger vec to store the students with the finance accounts
-    let mut student_finance_list:  Vec<(student::Model, Option<finance_client::account>)> = Vec::with_capacity(studentList.len());
+    let mut student_finance_list:  Vec<(student::Model, Option<FinanceAccount>)> = Vec::with_capacity(studentList.len());
     // Then we try to retrieve the finance account associated with each student in the database
     // and store it in the second vec along with the student details
     // if we can't then we just store the student details
     for student in studentList {
-        let finance_account_option = fetch_finance_account(&student.student_id.to_owned())
+        let finance_account_option = finance_client.getFinanceAccount(&student.student_id.to_owned())
             .await.expect("Error occurred while fetching finance account");
         student_finance_list.push((student, finance_account_option));
     }
@@ -123,21 +126,22 @@ async fn student_list(db_state: web::Data<DatabaseConnection>) -> Result<impl Re
 #[template(path = "Student.html")]
 struct StudentProfileTemplate {
     student: student::Model,
-    finance: Option<finance_client::account>
+    finance: Option<FinanceAccount>
 }
 
 // function for displaying a student profile
 #[get("/StudentProfile/{id}")]
-async fn student_profile(db_state: web::Data<DatabaseConnection>, path: web::Path<String>)
+async fn student_profile(program_state: web::Data<ProgramState>, path: web::Path<String>)
     -> Result<impl Responder> {
     let id = path.into_inner();
-    let db = db_state.get_ref();
+    let db = &program_state.db.clone();
+    let finance_client = program_state.finance_client.clone();
     // attempt to fetch the student record
     let query_result = Student::find_by_id(id).one(db)
         .await.expect("Could not get record from database.");
     if let Some(student) = query_result {
         // this attempts to fetch the finance account for the student
-        let finance_account = fetch_finance_account(&student.student_id.to_owned())
+        let finance_account = finance_client.getFinanceAccount(&student.student_id.to_owned())
             .await.expect("Error occurred while trying to fetch finance account");
         let template = StudentProfileTemplate {
             student: student,
@@ -167,7 +171,7 @@ struct student_form_input {
 }
 //function that deals with
 #[post("/RegisterStudentSubmit")]
-async fn register_student_submit(db_state: web::Data<DatabaseConnection>,
+async fn register_student_submit(program_state: web::Data<ProgramState>,
                                  form: web::Form<student_form_input>)
     -> Result<impl Responder> {
     let student_entry = student::ActiveModel {
@@ -177,10 +181,11 @@ async fn register_student_submit(db_state: web::Data<DatabaseConnection>,
         phone_number: Set(form.phone_number.to_owned()),
         address: Set(form.address.to_owned()),
     };
-    let db = db_state.get_ref();
+    let db = &program_state.db.clone();
+    let finance_client = program_state.finance_client.clone();
     let student_record = student::Entity::insert(student_entry).exec(db)
         .await.expect("Could not insert record");
-    finance_client::register_finance_account(&form.student_id.to_owned())
+    finance_client.registerFinanceClient(&form.student_id.to_owned())
         .await.expect("Could not register student in finance application.");
     library_client::register_account(&form.student_id);
     let success_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
@@ -194,9 +199,9 @@ struct enroll_form_template {
     courses: Vec<course::Model>,
 }
 #[get("/Enroll")]
-async fn enroll_form(db_state: web::Data<DatabaseConnection>)
+async fn enroll_form(program_state: web::Data<ProgramState>)
     -> Result<impl Responder> {
-    let db = db_state.get_ref();
+    let db = &program_state.db.clone();
     let studentList = Student::find().all(db)
         .await.expect("Could not fetch records from database.");
     let courseList = Course::find().all(db)
@@ -215,9 +220,10 @@ struct enrollment_form {
     course_id: i32,
 }
 #[post("/Enroll")]
-async fn enroll(form: web::Form<enrollment_form>, web_db_state: web::Data<DatabaseConnection>)
+async fn enroll(program_state: web::Data<ProgramState>, form: web::Form<enrollment_form>)
     -> Result<impl Responder> {
-    let db = web_db_state.get_ref();
+    let db = &program_state.db.clone();
+    let finance_client = program_state.finance_client.clone();
     let student_record = Student::find_by_id(form.student_id.clone()).one(db)
         .await.expect("Could not get record from database.");
     let course_record = Course::find_by_id(form.course_id).one(db)
@@ -226,10 +232,8 @@ async fn enroll(form: web::Form<enrollment_form>, web_db_state: web::Data<Databa
         let date_string = format!("{}", chrono::offset::Local::now().format("%d/%m/%Y"));
         let Some(course) = course_record else { panic!("No idea how you got here.") };
         let Some(student) = student_record else { panic!("No idea how you got here ")};
-        createInvoiceExternal(&student.student_id,
-                              &"TUITION".to_string(),
-                              course.tuition_cost,
-                              &date_string);
+        finance_client.createInvoice(&student.student_id, &"TUITION".to_string(),
+                                     course.tuition_cost, &date_string);
         let enrolment_record = enrolement::ActiveModel {
             student_id: Set(form.student_id.to_owned()),
             course_id: Set(form.course_id.to_owned()),
@@ -263,7 +267,11 @@ async fn index() -> Result<impl Responder> {
     Ok(NamedFile::open(path))
 }
 
-
+#[derive(Clone)]
+struct ProgramState {
+    finance_client: ReqwestFinanceClient,
+    db: DatabaseConnection,
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -271,9 +279,15 @@ async fn main() -> std::io::Result<()> {
     let config = crate::config::Config::from_env().unwrap();
     let db = Database::connect(config.database_url)
         .await.expect("Could not connect to database");
+    let finance_client = ReqwestFinanceClient {
+        BaseURL: config.finance_url,
+    };
     HttpServer::new(move || {
         App::new()
-            .app_data(Data::new(db.clone()))
+            .app_data(Data::new(ProgramState {
+                finance_client: finance_client.clone(),
+                db: db.clone(),
+            }))
             .service(index)
             .service(fetch_courses)
             .service(course_form)

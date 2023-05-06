@@ -11,6 +11,7 @@ pub struct Address {
 pub struct Config {
     pub server: Address,
     pub database_url: String,
+    pub finance_url: String,
 }
 
 impl Config {
