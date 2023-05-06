@@ -10,7 +10,7 @@ use std::fs;
 use std::sync::mpsc::SendError;
 use std::path::PathBuf;
 use actix_files::NamedFile;
-use actix_web::{HttpServer, App, web::Data, web, middleware::Logger, Responder, HttpResponse, Result};
+use actix_web::{HttpServer, App, web::Data, web, middleware::Logger, Responder, HttpResponse, Result, HttpRequest};
 use entity::{course, student, prelude};
 use entity::prelude::{Course, Student};
 use sea_orm::prelude::*;
@@ -240,7 +240,7 @@ async fn enroll(form: web::Form<enrollment_form>, web_db_state: web::Data<Databa
             },
             Err(someerror) => {
                 let template = ErrorTemplate {
-                    title_message: "Error occured while trying to enrole student".to_string(),
+                    title_message: "Error occurred while trying to enroll student".to_string(),
                     body_message: "Check if the student is already enrolled.".to_string()
                 };
                 let html = template.render().unwrap();
@@ -284,4 +284,64 @@ async fn main() -> std::io::Result<()> {
         .bind((config.server.host, config.server.port))?
         .run()
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::{test, web, App};
+    use table_extract::Table;
+
+    #[actix_web::test]
+    async fn test_index_get() {
+        let db = Database::connect("sqlite://student.db")
+            .await.expect("Could not connect to database");
+        let app = test::init_service(
+            App::new()
+                .app_data(Data::new(db.clone()))
+                .service(index),
+        ).await;
+        let req = test::TestRequest::get().uri("/").to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert!(resp.status().is_success());
+    }
+
+    #[actix_web::test]
+    async fn test_list_student_account() {
+        let db = Database::connect("sqlite://student.db")
+            .await.expect("Could not connect to database");
+        let app = test::init_service(
+            App::new()
+                .app_data(Data::new(db.clone()))
+                .service(student_list),
+        ).await;
+        let req = test::TestRequest::get().uri("/StudentList").to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        let text = std::str::from_utf8(&resp).unwrap();
+
+        let studentList: Vec<student::Model> = Student::find().all(&db)
+            .await.expect("Could not fetch records from database.");
+        let table = Table::find_first(text).unwrap();
+        let mut counter: usize = 0;
+        for row in &table {
+            let id = row.get("Student ID").unwrap();
+            let mut student_record_found: bool = false;
+            for student in &studentList {
+                if student.student_id.eq(id) {
+                    assert!(student.name.eq(row.get("Name").unwrap()));
+                    assert!(student.email.eq(row.get("Email").unwrap()));
+                    if let Some(number) = &student.phone_number {
+                        assert!(number.eq(row.get("Phone number").unwrap()))
+                    }
+                    assert!(student.address.eq(row.get("Address").unwrap()));
+                    student_record_found = true;
+                    break;
+                }
+            }
+            assert!(!student_record_found);
+            counter += 1;
+        }
+        assert_eq!(counter, studentList.len())
+    }
 }

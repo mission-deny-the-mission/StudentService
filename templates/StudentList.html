@@ -19,7 +19,7 @@
         <tbody>
             {% for (student, finance_account_option) in student_finance_array %}
             <tr>
-                <td>{{student.student_id}}</td>
+                <td><a href="StudentProfile/{{student.student_id}}">{{student.student_id}}</a></td>
                 <td>{{student.name}}</td>
                 <td>{{student.email}}</td>
                 {% if let Some(phone_number) = student.phone_number %}

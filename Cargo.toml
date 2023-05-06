@@ -16,3 +16,4 @@ serde_json = {verion = "^1.0.94"}
 chrono = "^0.4.24"
 config = "^0.10.1"
 dotenv = "0.15.0"
+table-extract = "0.2.3"
