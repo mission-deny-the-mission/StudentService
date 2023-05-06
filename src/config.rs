@@ -12,6 +12,7 @@ pub struct Config {
     pub server: Address,
     pub database_url: String,
     pub finance_url: String,
+    pub library_url: String,
 }
 
 impl Config {

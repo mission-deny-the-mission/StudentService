@@ -25,6 +25,7 @@ use chrono;
 use sea_orm::TryGetError::DbErr;
 use crate::entity::prelude::Enrolement;
 use dotenv::dotenv;
+use library_client::*;
 
 // this is a struct used for generating a HTML page using a template with askama template library
 // The fields the template needs to be filled in are specified as attributes in the struct
@@ -183,11 +184,12 @@ async fn register_student_submit(program_state: web::Data<ProgramState>,
     };
     let db = &program_state.db.clone();
     let finance_client = program_state.finance_client.clone();
+    let library_client = program_state.library_client.clone();
     let student_record = student::Entity::insert(student_entry).exec(db)
         .await.expect("Could not insert record");
     finance_client.registerFinanceClient(&form.student_id.to_owned())
         .await.expect("Could not register student in finance application.");
-    library_client::register_account(&form.student_id);
+    library_client.registerAccount(&form.student_id);
     let success_path: PathBuf = "./static/RegisterSuccess.html".parse().unwrap();
     Ok(NamedFile::open(success_path))
 }
@@ -270,6 +272,7 @@ async fn index() -> Result<impl Responder> {
 #[derive(Clone)]
 struct ProgramState {
     finance_client: ReqwestFinanceClient,
+    library_client: ReqwestLibraryClient,
     db: DatabaseConnection,
 }
 
@@ -282,10 +285,14 @@ async fn main() -> std::io::Result<()> {
     let finance_client = ReqwestFinanceClient {
         BaseURL: config.finance_url,
     };
+    let library_client = ReqwestLibraryClient {
+        BaseURL: config.library_url,
+    };
     HttpServer::new(move || {
         App::new()
             .app_data(Data::new(ProgramState {
                 finance_client: finance_client.clone(),
+                library_client: library_client.clone(),
                 db: db.clone(),
             }))
             .service(index)

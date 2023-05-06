@@ -18,7 +18,7 @@ pub struct ReqwestFinanceClient {
 // it represents fields in the JSON coming from the microservice that represents an individual
 // finance account
 #[derive(Serialize, Deserialize)]
-pub struct account {
+struct account {
     id: i32,
     studentId: String,
     hasOutstandingBalance: bool,
