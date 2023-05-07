@@ -162,7 +162,7 @@ async fn student_form() -> Result<impl Responder> {
     Ok(NamedFile::open(path))
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct student_form_input {
     student_id: String,
     name: String,
@@ -216,26 +216,38 @@ async fn enroll_form(program_state: web::Data<ProgramState>)
     Ok(HttpResponse::Ok().body(html))
 }
 
+// represents data from the enrollment form
 #[derive(Deserialize)]
 struct enrollment_form {
     student_id: String,
     course_id: i32,
 }
+// handles a student enrolling in a course
 #[post("/Enroll")]
 async fn enroll(program_state: web::Data<ProgramState>, form: web::Form<enrollment_form>)
     -> Result<impl Responder> {
+    // Get the database and finance client from the app state
     let db = &program_state.db.clone();
     let finance_client = program_state.finance_client.clone();
+
+    // This pulls the student record from the database to make sure it exists
     let student_record = Student::find_by_id(form.student_id.clone()).one(db)
         .await.expect("Could not get record from database.");
+    // This pulls the course record from the database to make sure it exists
     let course_record = Course::find_by_id(form.course_id).one(db)
         .await.expect("Could not get record from database.");
+
+    // If both records are present we can continue
     if student_record != None && course_record != None {
+        // This uses the chrono crate to get the current date, this is recorded later in the
+        // database as the date of enrollment. It's formatted into a string here before it gets
+        // inserted into the database.
         let date_string = format!("{}", chrono::offset::Local::now().format("%d/%m/%Y"));
-        let Some(course) = course_record else { panic!("No idea how you got here.") };
-        let Some(student) = student_record else { panic!("No idea how you got here ")};
-        finance_client.createInvoice(&student.student_id, &"TUITION".to_string(),
-                                     course.tuition_cost, &date_string);
+        // Unwrap the student and course records from the optionals they are stored in
+        let course = course_record.unwrap();
+        let student = student_record.unwrap();
+
+        // Here the record we put into the database for the enrolment is created
         let enrolment_record = enrolement::ActiveModel {
             student_id: Set(form.student_id.to_owned()),
             course_id: Set(form.course_id.to_owned()),
@@ -244,11 +256,17 @@ async fn enroll(program_state: web::Data<ProgramState>, form: web::Form<enrollme
         let enrolement_result = Enrolement::insert(enrolment_record).exec(db).await;
         match enrolement_result {
             Ok(Something) => {
+                // Here we setup an invoice in the finance microservice for the student's tuition fees
+                finance_client.createInvoice(&student.student_id, &"TUITION".to_string(),
+                                             course.tuition_cost, &date_string);
+                // if everything went okay we respond with a success page
                 let success_path: PathBuf = "./static/EnrollmentSuccess.html".parse().unwrap();
                 let html = fs::read_to_string(success_path).expect("Could not read file");
                 Ok(HttpResponse::Ok().body(html))
             },
             Err(someerror) => {
+                // If something went wrong creating the enrollment record then we give an error
+                // page instead describing what went wrong
                 let template = ErrorTemplate {
                     title_message: "Error occurred while trying to enroll student".to_string(),
                     body_message: "Check if the student is already enrolled.".to_string()
@@ -258,17 +276,27 @@ async fn enroll(program_state: web::Data<ProgramState>, form: web::Form<enrollme
             }
         }
     }
+    // If either the student or course does not exist we give an error page
     else {
-        Ok(HttpResponse::UnprocessableEntity().body("Student or course ID is invalid."))
+        let template = ErrorTemplate {
+            title_message: "Error occurred while trying to enroll student".to_string(),
+            body_message: "Either the student or course you are referring to does not exist"
+                .to_string()
+        };
+        let html = template.render().unwrap();
+        Ok(HttpResponse::UnprocessableEntity().body(html))
     }
 }
 
+// index page, this page is static and is simply read verbatim from the file
 #[get("/")]
 async fn index() -> Result<impl Responder> {
     let path: PathBuf = "./static/index.html".parse().unwrap();
     Ok(NamedFile::open(path))
 }
 
+// this structure stores the data used by different URL handlers within the service
+// specifically the database connection, finance client, and library client
 #[derive(Clone)]
 struct ProgramState {
     finance_client: ReqwestFinanceClient,
@@ -276,20 +304,26 @@ struct ProgramState {
     db: DatabaseConnection,
 }
 
+// main function of the program
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // stuff for reading and decoding the configuration
     dotenv().ok();
     let config = crate::config::Config::from_env().unwrap();
+    // connects to the database
     let db = Database::connect(config.database_url)
         .await.expect("Could not connect to database");
+    // Sets up the finance and library client implementations
     let finance_client = ReqwestFinanceClient {
         BaseURL: config.finance_url,
     };
     let library_client = ReqwestLibraryClient {
         BaseURL: config.library_url,
     };
+    // This setup up the HTTP web server and attaches all the data and services/URL handlers to it
     HttpServer::new(move || {
         App::new()
+            // We inject the finance client, library client, and database into the app as data
             .app_data(Data::new(ProgramState {
                 finance_client: finance_client.clone(),
                 library_client: library_client.clone(),

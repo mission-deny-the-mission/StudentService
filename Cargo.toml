@@ -9,13 +9,14 @@ edition = "2021"
 sea-orm = {version = "^0.11.0", features = ["runtime-actix-native-tls", "sqlx-sqlite", "macros"]}
 actix-web = {version = "^4"}
 actix-files = {version = "^0.6.1"}
+async-trait = "0.1.68"
 reqwest = {version = "0.11.14", features = ["json"]}
 serde = "^1.0.153"
+serde_json = "^1.0.94"
 askama = "^0.11.1"
-serde_json = {verion = "^1.0.94"}
 chrono = "^0.4.24"
 config = "^0.10.1"
 dotenv = "0.15.0"
 table-extract = "0.2.3"
-async-trait = "0.1.68"
+scraper = "0.16.0"
 migration = { path = "migration" }

@@ -10,12 +10,14 @@
             <th scope="col">Name</th>
             <th scope="col">Subject</th>
             <th scope="col">Leader</th>
+            <th scope="col">Tuition fee</th>
         </tr>
         {% for course in courses %}
         <tr>
             <td>{{course.name}}</td>
             <td>{{course.subject}}</td>
             <td>{{course.leader}}</td>
+            <td>{{course.tuition_cost}}</td>
         </tr>
         {% endfor %}
     </table>

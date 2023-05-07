@@ -9,6 +9,8 @@ use crate::finance_trait::{FinanceAccount, FinanceClient};
 
 type JsonLinks = HashMap<String, HashMap<String, String>>;
 
+// This is a structure that represents a finance client and stores the base URL for the finance
+// serivce being used
 #[derive(Clone)]
 pub struct ReqwestFinanceClient {
     pub BaseURL: String,
@@ -62,6 +64,8 @@ struct createInvoiceResult {
     _links: JsonLinks,
 }
 
+// Functions used in the finance client that are specific to this implementation
+// these functions are mostly private for internal use only
 impl ReqwestFinanceClient {
     // Function to register an invoice with the finance service
     async fn createInvoiceInternal(&self, StudentID: &String, invoiceType: &String, amount: f64, dueDate: &String)
@@ -89,6 +93,8 @@ impl ReqwestFinanceClient {
     }
 }
 
+// These are the functions necessary to implement the FinanceClient trait
+// these will all be not be private as functions that are part of a public trait are public
 #[async_trait]
 impl FinanceClient for ReqwestFinanceClient {
     // function which fetches an account from the finance service using a student id
@@ -119,7 +125,14 @@ impl FinanceClient for ReqwestFinanceClient {
     }
 
     async fn deleteFinanceAccount(&self, StudentID: &String) -> Option<Error> {
-        todo!()
+        let account = self.getFinanceAccount(StudentID)
+            .await.expect("Could not fetch finance account").unwrap();
+        let result = reqwest::Client::new()
+            .delete(format!("{}/accounts/{}", self.BaseURL, account.id))
+            .send()
+            .await
+            .expect("Error occurred sending delete request");
+        None
     }
 
     // returns true if account exits, returns false otherwise
@@ -131,8 +144,6 @@ impl FinanceClient for ReqwestFinanceClient {
             Option::Some(x) => Ok(true),
         }
     }
-
-
 
     // returns false if account already exists
     // otherwise attempts account creation and returns true if successful
@@ -148,7 +159,7 @@ impl FinanceClient for ReqwestFinanceClient {
                     .json(&studentSubmission)
                     .send()
                     .await
-                    .expect("");
+                    .expect("Error running post request to create finance account");
                 // returns true if the process was successful
                 Ok(true)
             }
