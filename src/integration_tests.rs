@@ -298,8 +298,7 @@ async fn test_create_student() {
     if finance_client.checkFinanceAccount(&form.student_id)
         .await.expect("Error using finance application")
     {
-        // for cleanup we have to delete the finance account if it has been created
-        finance_client.deleteFinanceAccount(&form.student_id);
+        finance_client.deleteFinanceAccount(&form.student_id).await;
     } else {
         assert!(false);
     }
@@ -307,4 +306,64 @@ async fn test_create_student() {
     // Make sure the finance account was deleted successfully
     assert!(!finance_client.checkFinanceAccount(&form.student_id)
         .await.expect("Error using finance application"))
+}
+
+#[actix_web::test]
+async fn test_enrollment() {
+    // same stuff as before pretty much
+    dotenv().ok();
+    let config = crate::config::Config::from_env().unwrap();
+    let finance_client = ReqwestFinanceClient {
+        BaseURL: config.finance_url,
+    };
+    let library_client = ReqwestLibraryClient {
+        BaseURL: config.library_url,
+    };
+    let db = setup_data_and_db().await;
+    let app = test::init_service(App::new()
+        .app_data(Data::new(ProgramState {
+            finance_client: finance_client.clone(),
+            library_client: library_client.clone(),
+            db: db.clone(),
+        }))
+        // only difference between the functions in this whole block is this line that binds the right service
+        // technically you could just bind all of them, like the main application does
+        .service(enroll)).await;
+
+    // setup form data for an enrollment
+    let form = enrollment_form {
+        student_id: "c1234".to_string(),
+        course_id: 1,
+    };
+
+    // register a finance account
+    finance_client.registerFinanceClient(&form.student_id).await.expect("asdf");
+
+    // send request to service
+    let req = test::TestRequest::post().set_form(&form).uri("/Enroll").to_request();
+    test::call_service(&app, req).await;
+
+    // check enrollment went into the database
+    let result = Enrolement::find().all(&db)
+        .await.expect("Error executing database request");
+    let mut flag = false;
+    for enrollment in &result {
+        if enrollment.student_id == form.student_id && enrollment.course_id == form.course_id {
+            flag = true;
+            break;
+        }
+    }
+    assert!(flag);
+
+    // make sure student has an outstanding balance to indicate an invoice has been created
+    let possible_account = finance_client.getFinanceAccount(&form.student_id)
+        .await.expect("Error fetching finance account");
+    if let Some(account) = possible_account {
+        assert!(account.hasOutstandingBalance);
+    } else {
+        assert!(false);
+    }
+
+    // delete finance account to clean up
+    finance_client.deleteFinanceAccount(&form.student_id).await;
 }

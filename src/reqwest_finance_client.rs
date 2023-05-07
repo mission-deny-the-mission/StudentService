@@ -125,13 +125,13 @@ impl FinanceClient for ReqwestFinanceClient {
     }
 
     async fn deleteFinanceAccount(&self, StudentID: &String) -> Option<Error> {
-        let account = self.getFinanceAccount(StudentID)
-            .await.expect("Could not fetch finance account").unwrap();
-        let result = reqwest::Client::new()
-            .delete(format!("{}/accounts/{}", self.BaseURL, account.id))
-            .send()
-            .await
-            .expect("Error occurred sending delete request");
+        if let Some(account) = self.getFinanceAccount(StudentID)
+            .await.expect("")
+        {
+            // for cleanup we have to delete the finance account if it has been created
+            let client = reqwest::Client::new();
+            client.delete(format!("{}/accounts/{}", self.BaseURL, account.id)).send().await.expect("");
+        }
         None
     }
 

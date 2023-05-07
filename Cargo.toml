@@ -19,4 +19,5 @@ config = "^0.10.1"
 dotenv = "0.15.0"
 table-extract = "0.2.3"
 scraper = "0.16.0"
+actix-rt = "2.8.0"
 migration = { path = "migration" }

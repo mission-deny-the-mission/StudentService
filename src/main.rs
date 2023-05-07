@@ -217,7 +217,7 @@ async fn enroll_form(program_state: web::Data<ProgramState>)
 }
 
 // represents data from the enrollment form
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct enrollment_form {
     student_id: String,
     course_id: i32,
@@ -246,7 +246,9 @@ async fn enroll(program_state: web::Data<ProgramState>, form: web::Form<enrollme
         // Unwrap the student and course records from the optionals they are stored in
         let course = course_record.unwrap();
         let student = student_record.unwrap();
-
+        // Here we setup an invoice in the finance microservice for the student's tuition fees
+        finance_client.createInvoice(&student.student_id, &"TUITION".to_string(),
+                                     course.tuition_cost, &date_string);
         // Here the record we put into the database for the enrolment is created
         let enrolment_record = enrolement::ActiveModel {
             student_id: Set(form.student_id.to_owned()),
@@ -256,9 +258,7 @@ async fn enroll(program_state: web::Data<ProgramState>, form: web::Form<enrollme
         let enrolement_result = Enrolement::insert(enrolment_record).exec(db).await;
         match enrolement_result {
             Ok(Something) => {
-                // Here we setup an invoice in the finance microservice for the student's tuition fees
-                finance_client.createInvoice(&student.student_id, &"TUITION".to_string(),
-                                             course.tuition_cost, &date_string);
+
                 // if everything went okay we respond with a success page
                 let success_path: PathBuf = "./static/EnrollmentSuccess.html".parse().unwrap();
                 let html = fs::read_to_string(success_path).expect("Could not read file");
